@@ -23,7 +23,9 @@ no zone other than the one `TZ` names, no leap seconds.
    1800 to 2600 with its neighbours, far years by the footer rule, and
    32-bit time's edges. *Done.*
 2. **The programs.** Each moves on its own commit, in its own
-   repository, when its owner says; rzone goes in as a submodule.
+   repository, finding rzone as the sibling `../rzone`. *Done
+   2026-10-19* for concha, sauce, razzle, notis, alba, cali, arno and
+   rat; mosaico stays on libc's `strftime`.
 
 ## Which programs could move, and what each would drop
 

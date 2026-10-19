@@ -19,10 +19,11 @@ date and time the clock shows, as C's `localtime_r` does, without C.
   to 2600 and the seconds either side of it, far years where only the
   rule answers, and the edges of 32-bit time.
 
-A program adds rzone as a submodule and builds with its own raz:
+A program finds rzone as a sibling checkout, `../rzone`, as it finds
+rnet and rjson, and builds with its own raz:
 
-    $ git submodule add https://github.com/ldiaz94/rzone rzone
-    $ raz -I rzone/src -o build/prog src/Prog.raz
+    RZONE ?= ../rzone
+    $ raz -I $(RZONE)/src -o build/prog src/Prog.raz
 
 and asks:
 
