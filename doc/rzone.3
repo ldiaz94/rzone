@@ -1,0 +1,215 @@
+.Dd October 19, 2026
+.Dt RZONE 3
+.Os
+.Sh NAME
+.Nm Zone
+.Nd local time for raz programs: offsets, abbreviations and dates
+.Sh SYNOPSIS
+.Bd -literal
+import Zone;
+
+type Time = record
+    year, month, day: INT;
+    hour, minute, second: INT;
+    weekday: INT;
+    yearday: INT;
+    offset: INT;
+    abbr: []U8;
+end;
+
+proc local(t: I64): Time;
+proc offset(t: I64): (INT, []U8);
+proc split(t: I64; off: INT): Time;
+proc days(y, m, d: INT): I64;
+proc date(n: I64): (INT, INT, INT);
+.Ed
+.Sh DESCRIPTION
+.Nm
+is a raz module in rzone, a repository a program adds as a submodule
+and builds with
+.Fl I Pa rzone/src .
+It answers what C's
+.Fn localtime_r
+answers: given an instant, in seconds since 1970-01-01 UTC, as
+.Li Sys.now() div 1000000000
+gives it, how far the local clock is ahead of UTC then, what the zone
+calls that clock, and the date and time the clock shows.
+.Pp
+.Fn local
+gives all of it, as a
+.Vt Time :
+.Fa month
+from 1 to 12,
+.Fa day
+from 1 to 31,
+.Fa hour ,
+.Fa minute
+and
+.Fa second
+as a clock shows them,
+.Fa weekday
+from 0 for Sunday to 6 for Saturday,
+.Fa yearday
+from 0 for 1 January to 365,
+.Fa offset
+in seconds east of UTC, and
+.Fa abbr ,
+the zone's name for the clock:
+.Ql BST ,
+.Ql EDT ,
+.Ql +0545 .
+The abbreviation is kept by the module for as long as the program
+runs.
+.Fn offset
+gives only the offset and the abbreviation, for a program that writes
+times as UTC and an offset, or wants no more.
+.Pp
+.Fn split
+gives the
+.Vt Time
+of
+.Fa t
+on a clock a fixed
+.Fa off
+seconds east of UTC, its
+.Fa abbr
+empty: UTC itself with an
+.Fa off
+of 0, or a time kept with the offset it was written in.
+.Pp
+.Fn days
+gives the day of
+.Fa y Ns - Ns Fa m Ns - Ns Fa d ,
+a number that is 0 for 1970-01-01 and counts on from it, and back
+before it below 0, for a month from 1 to 12; a day past the end of
+its month runs on into the next, so that
+.Li days(2026, 1, 32)
+is 1 February.
+.Fn date
+gives the year, month and day of day
+.Fa n .
+Both follow the proleptic Gregorian calendar, by Howard Hinnant's
+algorithms, for any year an
+.Vt INT
+holds; with them, a date steps by whole days and two dates subtract.
+.Ss The zone
+The zone is the one
+.Ev TZ
+names, read as the GNU C library reads it:
+.Bl -bullet
+.It
+.Ev TZ
+unset: the file
+.Pa /etc/localtime .
+.It
+.Ev TZ
+empty: UTC.
+.It
+Otherwise, a leading
+.Ql \&:
+dropped, the file it names: a path if it starts with
+.Ql / ,
+else a name under
+.Ev TZDIR ,
+or
+.Pa /usr/share/zoneinfo
+if
+.Ev TZDIR
+is unset or empty, such as
+.Ql Europe/London .
+.It
+If there is no such file,
+.Ev TZ
+itself as a POSIX rule, such as
+.Ql EST5EDT,M3.2.0,M11.1.0
+or
+.Ql <+1030>-10:30<+11>-11,M10.1.0,M4.1.0 :
+a standard clock's name and its offset west of UTC, and maybe a
+summer clock's name, its offset, an hour ahead if it gives none, and
+the date and time each begins.
+A rule with a summer clock and no dates takes the United States'
+since 2007,
+.Ql M3.2.0,M11.1.0 .
+.It
+Anything else, a file that isn't TZif or a rule that doesn't read, is
+UTC, with the abbreviation
+.Ql UTC .
+.El
+.Pp
+A zone file is TZif (RFC 8536), version 1 or later: the instants at
+which the clock changed, and the clock from each on; before the first,
+the file's first clock. From version 2 the file ends in a POSIX rule
+for the instants after the last change, which
+.Nm
+follows as it follows one in
+.Ev TZ .
+.Pp
+The zone is read once, at the first call of
+.Fn local
+or
+.Fn offset ,
+and kept; each answer after that is a search of the table, or a few
+days worked out by the rule. As with C's
+.Fn localtime_r ,
+a change to
+.Ev TZ
+or to the file after that isn't seen.
+.Sh EXAMPLES
+The time now, and the zone's name for the clock:
+.Bd -literal -offset indent
+tm := Zone.local(Sys.now() div 1000000000);
+Fmt.print("{}-{}-{} {}:{} {}\en", [Fmt.int(tm.year), Fmt.int(tm.month), Fmt.int(tm.day),
+    Fmt.int(tm.hour), Fmt.int(tm.minute), Fmt.str(tm.abbr)]);
+.Ed
+.Pp
+Today, as a day number, and the day a week from it:
+.Bd -literal -offset indent
+tm := Zone.local(Sys.now() div 1000000000);
+today := Zone.days(tm.year, tm.month, tm.day);
+y, m, d := Zone.date(today + 7);
+.Ed
+.Pp
+An instant from a local date and time, at the offset the zone had a
+day before; the offset of the instant itself may differ near a change
+of the clock:
+.Bd -literal -offset indent
+t := Zone.days(y, m, d) * 86400 + h * 3600 + min * 60;
+off, _ := Zone.offset(t - 86400);
+t := t - off;
+.Ed
+.Sh STANDARDS
+RFC 8536, the Time Zone Information Format; POSIX's
+.Ev TZ ,
+in the Base Definitions, section 8.3.
+.Sh SEE ALSO
+.Xr localtime 3 ,
+.Xr tzfile 5 ,
+.Xr zic 8
+.Sh CAVEATS
+Where the C library is wrong,
+.Nm
+doesn't follow it.
+For a zone that is only a rule, the C library works out each year
+before 1970 as if it were 1970, so that its summer comes at the wrong
+instants;
+.Nm
+works the year out.
+A rule whose summer is the whole year, such as
+.Ql XXX3YYY,0/0,J365/25 ,
+is summer throughout here, as zic means it; the C library gives a few
+hours of standard time at each new year.
+And a name that is no file and no rule, such as
+.Ql Bogus/Name ,
+is UTC here, where the C library keeps the letters it starts with as
+the abbreviation,
+.Ql Bogus .
+.Pp
+Left out: the zones that count leap seconds, the
+.Pa right/
+ones, which are UTC here; the C library's
+.Pa posixrules
+file, for a rule with no dates; local time back to an instant, which
+is ambiguous where the clock goes back and missing where it goes
+forward; and formatting.
+The first call isn't safe from two threads at once: a program with
+threads asks once before it starts them.

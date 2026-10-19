@@ -1,0 +1,212 @@
+(* Glibc: Zone against the C library, zone by zone.
+
+   For each case, build/glibc, test/glibc.c compiled, writes the C
+   library's local time at many instants under one environment, and
+   this program, started again as "Glibc check file case" under the
+   case's own environment, works out the same with Zone and compares
+   them line by line. A case's two environments are the same but where
+   rzone means to differ from the C library, or the C library reads a
+   file rzone leaves out: a bogus name is UTC here, and a rule with no
+   dates takes the United States' here where the C library takes the
+   posixrules file's. For a zone that is only a rule, the C library
+   works out every year before 1970 as if it were 1970, and gets the
+   changes of the clock wrong; those years are left out.
+
+   It depends on Zone, Sys, Files, Buf, Fmt, Str, Heap and Out. *)
+module Glibc;
+import Zone, Sys, Files, Buf, Fmt, Str, Heap, Out, Rt;
+
+const Always = -4000000000000000000;
+
+var
+    cases, failed: INT;
+    since: I64;     (* the first instant the case compares *)
+
+(* n in at least w digits. *)
+proc pad(var b: Buf.Buf; n: INT; w: INT);
+var s: [20]U8; k: INT;
+begin
+    s, k := Str.fromInt(n);
+    while w > k do
+        Buf.add(b, '0');
+        DEC(w);
+    end;
+    Buf.str(b, s[0..k]);
+end;
+
+(* tm as test/glibc.c writes it: %z %Z %Y-%m-%d %H:%M:%S %u %j. *)
+proc format(var b: Buf.Buf; t: I64; const tm: Zone.Time);
+var a: INT;
+begin
+    Fmt.write(b, "{} ", [Fmt.int(t)]);
+    a := tm.offset;
+    if a < 0 then
+        Buf.add(b, '-');
+        a := -a;
+    else
+        Buf.add(b, '+');
+    end;
+    a := a div 60;
+    pad(b, a div 60, 2);
+    pad(b, a mod 60, 2);
+    Fmt.write(b, " {} {}-", [Fmt.str(tm.abbr), Fmt.int(tm.year)]);
+    pad(b, tm.month, 2);
+    Buf.add(b, '-');
+    pad(b, tm.day, 2);
+    Buf.add(b, ' ');
+    pad(b, tm.hour, 2);
+    Buf.add(b, ':');
+    pad(b, tm.minute, 2);
+    Buf.add(b, ':');
+    pad(b, tm.second, 2);
+    if tm.weekday = 0 then
+        Buf.str(b, " 7 ");
+    else
+        Fmt.write(b, " {} ", [Fmt.int(tm.weekday)]);
+    end;
+    pad(b, tm.yearday + 1, 3);
+end;
+
+(* Each line of the C library's in path against Zone's, from the
+   instant since on: the status, 0 if all agree. The first few that don't are shown. *)
+proc check(path, name: []U8; since: I64): INT;
+var text: Buf.Buf; mine: Buf.Buf; all, line, word: []U8; t: I64; ok, more: BOOL; n, wrong: INT;
+begin
+    Buf.init(text, Heap.heap);
+    Buf.init(mine, Heap.heap);
+    if not Files.read(path, text) then
+        Fmt.print("{}: can't read {}\n", [Fmt.str(name), Fmt.str(path)]);
+        return 1;
+    end;
+    all := Buf.bytes(text);
+    n := 0;
+    wrong := 0;
+    line, all, more := Str.cut(all, "\n");
+    while more do
+        word, _ := Str.field(line);
+        t, ok := Str.toInt(word);
+        if not ok then
+            Fmt.print("{}: not an instant: {}\n", [Fmt.str(name), Fmt.str(line)]);
+            return 1;
+        end;
+        if t < since then
+            line, all, more := Str.cut(all, "\n");
+            continue;
+        end;
+        Buf.reset(mine);
+        format(mine, t, Zone.local(t));
+        if Buf.bytes(mine) # line then
+            INC(wrong);
+            if wrong <= 5 then
+                Fmt.print("{}:\n    glibc {}\n    rzone {}\n", [Fmt.str(name), Fmt.str(line), Fmt.str(Buf.bytes(mine))]);
+            end;
+        end;
+        INC(n);
+        line, all, more := Str.cut(all, "\n");
+    end;
+    if n < 1000 then
+        Fmt.print("{}: only {} instants\n", [Fmt.str(name), Fmt.int(n)]);
+        return 1;
+    end;
+    if wrong > 0 then
+        Fmt.print("{}: {} of {} instants wrong\n", [Fmt.str(name), Fmt.int(wrong), Fmt.int(n)]);
+        return 1;
+    end;
+    return 0;
+end;
+
+(* p run to its end: whether it ended well. *)
+proc runs(p: Sys.Program): BOOL;
+var pid, status: INT; how: Sys.Status;
+begin
+    pid := Sys.spawn(p);
+    if pid < 0 then return false; end;
+    _, how, status := Sys.wait(pid, true);
+    return (how = Sys.exited) and (status = 0);
+end;
+
+(* The case name: the C library under ref, and Zone under env, compared. *)
+proc run(name: []U8; env, ref: [][]U8);
+var fd: INT; path: Buf.Buf; from: [20]U8; n: INT;
+begin
+    INC(cases);
+    Buf.init(path, Heap.heap);
+    defer Buf.done(path);
+    Fmt.write(path, "build/glibc-{}.txt", [Fmt.int(cases)]);
+    fd := Sys.create(Buf.bytes(path));
+    if fd < 0 then Rt.stop("can't make the C library's file"); end;
+    if not runs({path: "build/glibc", args: ["build/glibc"], env: ref, onlyEnv: true, fds: [0, fd, 0]}) then
+        Rt.stop("build/glibc failed");
+    end;
+    Sys.close(fd);
+    Out.flush;
+    from, n := Str.fromInt(since);
+    if not runs({path: Files.arg(0), args: [Files.arg(0), "check", Buf.bytes(path), name, from[0..n]], env: env,
+        onlyEnv: true})
+    then
+        INC(failed);
+    end;
+end;
+
+(* A zone the C library and Zone read alike. *)
+proc same(tz: []U8);
+var b: Buf.Buf; env: [1][]U8;
+begin
+    Buf.init(b, Heap.heap);
+    Buf.str(b, "TZ=");
+    Buf.str(b, tz);
+    env[0] := Buf.bytes(b);
+    run(tz, env, env);
+end;
+
+(* A zone that is only a rule, from 1970 on. *)
+proc rule(tz: []U8);
+begin
+    since := 0;
+    same(tz);
+    since := Always;
+end;
+
+proc main*: INT;
+var n: I64; ok: BOOL;
+begin
+    if (ARGC() = 5) and (Files.arg(1) = "check") then
+        n, ok := Str.toInt(Files.arg(4));
+        if not ok then Rt.stop("Glibc check: the first instant isn't a number"); end;
+        return check(Files.arg(2), Files.arg(3), n);
+    end;
+    since := Always;
+    same("Europe/London");
+    same("America/New_York");
+    same("Australia/Lord_Howe");    (* summer half an hour ahead *)
+    same("Asia/Kolkata");
+    same("Pacific/Chatham");        (* +12:45, and +13:45 in summer *)
+    same("America/Sao_Paulo");      (* no summer since 2019 *)
+    same("Europe/Dublin");          (* summer is the standard clock, winter the other *)
+    same("America/Nuuk");           (* its rule's changes at -1 and 0 hours *)
+    same("Antarctica/Troll");       (* two hours ahead in summer *)
+    same("Asia/Tokyo");
+    same("UTC");
+    same(":Africa/Casablanca");     (* a : before the name *)
+    same("/usr/share/zoneinfo/Pacific/Apia");    (* a path *)
+    rule("EST5EDT,M3.2.0,M11.1.0");
+    rule("<+1030>-10:30<+11>-11,M10.1.0,M4.1.0");
+    rule("AAA-3BBB,J60/2,300/3");
+    rule("<-02>2<-01>,M3.5.0/-1,M10.5.0/0");
+    rule("Nonsense5");
+    same("");
+    run("TZ unset", [], []);
+    run("TZDIR", ["TZ=New_York", "TZDIR=/usr/share/zoneinfo/America"], ["TZ=New_York",
+        "TZDIR=/usr/share/zoneinfo/America"]);
+    run("Test/Slim", ["TZ=Test/Slim", "TZDIR=build/zi"], ["TZ=Test/Slim", "TZDIR=build/zi"]);
+    run("Test/South", ["TZ=Test/South", "TZDIR=build/zi"], ["TZ=Test/South", "TZDIR=build/zi"]);
+    run("Bogus/Name", ["TZ=Bogus/Name"], ["TZ=UTC"]);
+    since := 0;
+    run("XST5XDT", ["TZ=XST5XDT"], ["TZ=XST5XDT,M3.2.0,M11.1.0"]);
+    since := Always;
+    Fmt.print("Glibc: {} of {} cases agree with the C library\n", [Fmt.int(cases - failed), Fmt.int(cases)]);
+    if failed > 0 then return 1; end;
+    return 0;
+end;
+
+end Glibc.
