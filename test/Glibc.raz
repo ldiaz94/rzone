@@ -69,8 +69,8 @@ end;
 
 (* Each line of the C library's in path against Zone's, from the
    instant since on: the status, 0 if all agree. The first few that don't are shown. *)
-proc check(path, name: []U8; since: I64): INT;
-var text: Buf.Buf; mine: Buf.Buf; all, line, word: []U8; t: I64; ok, more: BOOL; n, wrong: INT;
+proc check(path, name: []const U8; since: I64): INT;
+var text: Buf.Buf; mine: Buf.Buf; all, line, word: []const U8; t: I64; ok, more: BOOL; n, wrong: INT;
 begin
     Buf.init(text, Heap.heap);
     Buf.init(mine, Heap.heap);
@@ -126,7 +126,7 @@ begin
 end;
 
 (* The case name: the C library under ref, and Zone under env, compared. *)
-proc run(name: []U8; env, ref: [][]U8);
+proc run(name: []const U8; env, ref: [][]const U8);
 var fd: INT; path: Buf.Buf; from: [20]U8; n: INT;
 begin
     INC(cases);
@@ -149,8 +149,8 @@ begin
 end;
 
 (* A zone the C library and Zone read alike. *)
-proc same(tz: []U8);
-var b: Buf.Buf; env: [1][]U8;
+proc same(tz: []const U8);
+var b: Buf.Buf; env: [1][]const U8;
 begin
     Buf.init(b, Heap.heap);
     Buf.str(b, "TZ=");
@@ -160,7 +160,7 @@ begin
 end;
 
 (* A zone that is only a rule, from 1970 on. *)
-proc rule(tz: []U8);
+proc rule(tz: []const U8);
 begin
     since := 0;
     same(tz);

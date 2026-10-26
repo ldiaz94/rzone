@@ -54,13 +54,13 @@ type
         weekday*: INT;                  (* 0 for Sunday to 6 for Saturday *)
         yearday*: INT;                  (* 0 for 1 January to 365 *)
         offset*: INT;                   (* seconds east of UTC *)
-        abbr*: []U8;                    (* what the zone calls the clock *)
+        abbr*: []const U8;              (* what the zone calls the clock *)
     end;
 
     (* A clock a zone keeps: seconds east of UTC, and its name. *)
     Clock = record
         off: INT;
-        abbr: []U8;
+        abbr: []const U8;
     end;
 
     (* When summer time begins, or ends, each year: Jn, day n of 1 to
@@ -86,7 +86,7 @@ type
     (* The zone, as read. *)
     Table = record
         trans: []I64;       (* the instants the clock changed, in order *)
-        idx: []U8;          (* the clock from each on *)
+        idx: []const U8;    (* the clock from each on *)
         clocks: []Clock;    (* the first is the clock before them all *)
         hasRule: BOOL;      (* for after the last change *)
         rule: Rule;
@@ -94,7 +94,7 @@ type
 
     (* A rule being read, and where. *)
     Text = record
-        s: []U8;
+        s: []const U8;
         at: INT;
     end;
 
@@ -213,7 +213,7 @@ end;
 
 (* A name: three letters or more, or <...> of three or more letters,
    digits, + and -, the brackets left out. *)
-proc name(var r: Text): ([]U8, BOOL);
+proc name(var r: Text): ([]const U8, BOOL);
 var b: INT;
 begin
     if peek(r) = '<' then
@@ -291,7 +291,7 @@ end;
 (* The rule s; false if it isn't one. Offsets in a rule are west of
    UTC, the reverse of a clock's; summer time is an hour ahead unless
    the rule says otherwise. *)
-proc readRule(s: []U8): (Rule, BOOL);
+proc readRule(s: []const U8): (Rule, BOOL);
 var r: Rule; t: Text; ok: BOOL;
 begin
     t := {s: s};
@@ -394,7 +394,7 @@ end;
 (* ------------------------------------------------------ the file, read *)
 
 (* The big-endian number of w bytes at z[at], signed. *)
-proc big(z: []U8; at, w: INT): I64;
+proc big(z: []const U8; at, w: INT): I64;
 begin
     if w = 4 then return I64(I32(U32(Str.be(z[at..at + 4])))); end;
     return I64(Str.be(z[at..at + w]));
@@ -409,7 +409,7 @@ end;
    bytes of abbreviations, each ended by a zero, leapcnt leap records
    of w + 4 bytes, and isstdcnt and isutcnt bytes of flags. Where the
    block ends, or -1 if it isn't one this module reads. *)
-proc block(z: []U8; h, w: INT): INT;
+proc block(z: []const U8; h, w: INT): INT;
 var isut, isstd, leaps, nt, nk, nc, e: I64;
 begin
     if (h + 44 > LEN(z)) or (z[h..h + 4] # "TZif") then return -1; end;
@@ -426,7 +426,7 @@ begin
 end;
 
 (* The block at h into zone; false if it is corrupt. *)
-proc take(z: []U8; h, w: INT): BOOL;
+proc take(z: []const U8; h, w: INT): BOOL;
 var nt, nk, nc, t, x, k, i, a, e: INT; trans: Times.Vec; clocks: Clocks.Vec; c: ^Clock;
 begin
     nt := INT(big(z, h + 32, 4));
@@ -467,7 +467,7 @@ end;
 
 (* The footer at at (section 3.3), after a version 2 block: a newline,
    a rule, a newline. An empty rule leaves the last clock going on. *)
-proc footer(z: []U8; at: INT): BOOL;
+proc footer(z: []const U8; at: INT): BOOL;
 var i: INT; ok: BOOL;
 begin
     if (at >= LEN(z)) or (z[at] # '\n') then return false; end;
@@ -484,8 +484,8 @@ end;
    block, with 32-bit times, comes first, and from version 2 the same
    again with 64-bit times, then the footer; a file whose second block
    or footer is cut short is refused, not read by its first. *)
-proc readZone(path: []U8): BOOL;
-var z: []U8; e, e2: INT;
+proc readZone(path: []const U8): BOOL;
+var z: []const U8; e, e2: INT;
 begin
     Buf.init(file, Heap.heap);
     if Files.load(path, file) # 0 then return false; end;
@@ -499,8 +499,8 @@ end;
 
 (* TZ, and whether it is set at all: Sys.env gives "" for both unset
    and empty, which mean different zones. *)
-proc envTZ: ([]U8, BOOL);
-var i: INT; entry: []U8; found: BOOL;
+proc envTZ: ([]const U8, BOOL);
+var i: INT; entry: []const U8; found: BOOL;
 begin
     i := 0;
     entry, found := Sys.envAt(0);
@@ -515,7 +515,7 @@ end;
 (* The zone TZ names, as the module's comment says; UTC if it names
    none this module reads. *)
 proc load;
-var tz, dir: []U8; given, ok: BOOL; path: Buf.Buf; r: Rule;
+var tz, dir: []const U8; given, ok: BOOL; path: Buf.Buf; r: Rule;
 begin
     loaded := true;
     utc[0] := {abbr: "UTC"};
@@ -553,7 +553,7 @@ end;
 (* The offset east of UTC, in seconds, of the local clock at t, seconds
    since 1970, and its abbreviation: by the zone's table, and after it
    by its rule. *)
-proc offset*(t: I64): (INT, []U8);
+proc offset*(t: I64): (INT, []const U8);
 var lo, hi, mid: INT; c: Clock; tableEnd: I64; dst, found: BOOL;
 begin
     if not loaded then load; end;
@@ -588,7 +588,7 @@ end;
 
 (* The instant t, seconds since 1970, on the local clock. *)
 proc local*(t: I64): Time;
-var off: INT; abbr: []U8; tm: Time;
+var off: INT; abbr: []const U8; tm: Time;
 begin
     off, abbr := offset(t);
     tm := split(t, off);
@@ -598,7 +598,7 @@ end;
 
 (* ------------------------------------------------------------ the test *)
 
-type Case = record s: []U8; ok: BOOL; end;
+type Case = record s: []const U8; ok: BOOL; end;
 
 const
     Rules: []Case = [{s: "UTC0", ok: true}, {s: "EST5EDT,M3.2.0,M11.1.0", ok: true},
@@ -611,7 +611,7 @@ const
         {s: "EST5EDT,J0,J365", ok: false}, {s: "EST5EDT,366,0", ok: false}, {s: "EST5EDT,M3.2.0/168,M11.1.0", ok: false},
         {s: "EST5EDT,M3.2.0,M11.1.0x", ok: false}, {s: "Europe/London", ok: false}, {s: "", ok: false}];
 
-proc fail(what: []U8; n: I64);
+proc fail(what: []const U8; n: I64);
 begin
     Out.str("Zone: ");
     Out.str(what);
