@@ -25,6 +25,8 @@ rnet and rjson, and builds with its own raz:
     RZONE ?= ../rzone
     $ raz -I $(RZONE)/src -o build/prog src/Prog.raz
 
+Or `make install` puts the modules in `~/.raz/lib` (`RAZ_PATH`), and a program imports them with no `-I`.
+
 and asks:
 
     tm := Zone.local(Sys.now() div 1000000000);

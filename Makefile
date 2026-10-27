@@ -40,13 +40,21 @@ fmt: | build
 loc:
 	@rloc src test/*.raz
 
-# the page; the module itself goes with each program, as a submodule
+# Where `make install` puts the modules, for programs to import with no -I: raz(1), RAZ_PATH.
+RAZLIB ?= $(HOME)/.raz/lib
+MODULES = $(wildcard src/*.raz)
+
+# the page and the modules
 install:
 	mkdir -p $(PREFIX)/share/man/man3
 	cp doc/rzone.3 $(PREFIX)/share/man/man3/rzone.3
+	mkdir -p $(RAZLIB)
+	install -m644 $(MODULES) $(RAZLIB)
+	echo 0.25 > $(RAZLIB)/RAZ-VERSION
 
 uninstall:
 	rm -f $(PREFIX)/share/man/man3/rzone.3
+	rm -f $(addprefix $(RAZLIB)/,$(notdir $(MODULES)))
 
 clean:
 	rm -rf build
