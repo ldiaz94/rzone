@@ -36,8 +36,7 @@ and asks:
     y, m, d := Zone.date(today + 7);
 
 `doc/rzone.3` describes every procedure, and where rzone and glibc
-part; `PLAN.md` says which programs in `~/r` could take it, and what
-each would drop.
+part.
 
     $ make check            # the module's test, and glibc against it (needs cc and zic)
     $ make install          # rzone.3 into ~/.local/share/man/man3
