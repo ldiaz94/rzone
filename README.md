@@ -1,6 +1,6 @@
 # rzone
 
-rzone is local time for [raz](https://raz.lucelad.workers.dev)
+rzone is local time for [raz](https://raz.lucela.org)
 programs: a module, `Zone`, that says, for an instant, how far the
 local clock is ahead of UTC, what the zone calls that clock, and the
 date and time the clock shows, as C's `localtime_r` does, without C.

@@ -7,7 +7,7 @@
 RAZ ?= raz
 CC ?= cc
 RAZVERSION = 0.25.0
-RAZSITE = https://raz.lucelad.workers.dev
+RAZSITE = https://raz.lucela.org
 # Build and test from this checkout only, never the copy `make install` put on RAZ_PATH.
 export RAZ_PATH :=
 # raz's tools, the formatter among them, lie beside its real path
