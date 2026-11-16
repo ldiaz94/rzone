@@ -1,1 +1,3 @@
 build/
+# the owner's agent notes, local only; AGENTS.md is the shared part
+/CLAUDE.md

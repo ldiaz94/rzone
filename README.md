@@ -42,4 +42,6 @@ each would drop.
     $ make check            # the module's test, and glibc against it (needs cc and zic)
     $ make install          # rzone.3 into ~/.local/share/man/man3
 
+Defect reports are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) says how.
+
 rzone is under the ISC licence, in `LICENSE`.
